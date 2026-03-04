@@ -1,0 +1,14 @@
+---
+# Default port for the application
+# Actually useless..
+web_app_port: 8000
+
+# Default restart policy for Docker container
+web_app_docker_restart_policy: "unless-stopped"
+
+# Default environment variables (empty by default)
+web_app_environment_vars: {}
+# Set to true to remove application completely
+# Wipe only:    ansible-playbook deploy.yml -e "web_app_wipe=true" --tags web_app_wipe
+# Clean install: ansible-playbook deploy.yml -e "web_app_wipe=true"
+web_app_wipe: false

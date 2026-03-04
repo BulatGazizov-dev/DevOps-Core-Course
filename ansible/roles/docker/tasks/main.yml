@@ -1,65 +1,87 @@
 ---
-- name: Update apt cache
-  apt:
-    update_cache: yes
-    cache_valid_time: 3600
+- name: Docker Installation
+  tags:
+    - docker_install
+    - docker
+  become: true
 
-- name: Install required system packages
-  apt:
-    name:
-      - curl
-      - ca-certificates
-    state: present
+  block:
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
 
-- name: Create keyrings directory
-  file:
-    path: /etc/apt/keyrings
-    state: directory
-    mode: '0755'
+    - name: Install required system packages
+      ansible.builtin.apt:
+        name:
+          - curl
+          - ca-certificates
+        state: present
 
-- name: Download Docker's official GPG key
-  get_url:
-    url: https://download.docker.com/linux/debian/gpg
-    dest: /etc/apt/keyrings/docker.asc
-    mode: '0644'
+    - name: Create keyrings directory
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
 
-- name: Add Docker repository to apt sources
-  template:
-    src: docker.sources.j2
-    dest: /etc/apt/sources.list.d/docker.sources
-    mode: '0644'
-  vars:
-    codename: "{{ ansible_distribution_release }}"
+    - name: Download Docker GPG key
+      block:
+        - name: Download Docker's official GPG key
+          ansible.builtin.get_url:
+            url: https://download.docker.com/linux/ubuntu/gpg
+            dest: /etc/apt/keyrings/docker.asc
+            mode: "0644"
+      rescue:
+        - name: Wait 10 seconds and retry GPG key download
+          ansible.builtin.pause:
+            seconds: 10
+        - name: Retry Docker GPG key download
+          ansible.builtin.get_url:
+            url: https://download.docker.com/linux/ubuntu/gpg
+            dest: /etc/apt/keyrings/docker.asc
+            mode: "0644"
 
-- name: Update apt cache after adding Docker repo
-  apt:
-    update_cache: yes
+    - name: Add Docker repository to apt sources
+      ansible.builtin.template:
+        src: docker.sources.j2
+        dest: /etc/apt/sources.list.d/docker.sources
+        mode: "0644"
+      vars:
+        codename: "{{ ansible_distribution_release }}"
 
-- name: Install Docker packages
-  apt:
-    name:
-      - "{{ 'docker-ce' if docker_version == '' else 'docker-ce=' + docker_version }}"
-      - "{{ 'docker-ce-cli' if docker_cli_version == '' else 'docker-ce-cli=' + docker_cli_version }}"
-      - "{{ 'containerd.io' if containerd_version == '' else 'containerd.io=' + containerd_version }}"
-      - docker-buildx-plugin
-      - docker-compose-plugin
-    state: present
-  become: yes
-  notify: restart docker
+    - name: Update apt cache after adding Docker repo
+      ansible.builtin.apt:
+        update_cache: true
 
-- name: Ensure Docker service is running and enabled
-  systemd:
-    name: docker
-    state: started
-    enabled: yes
+    - name: Install Docker packages
+      ansible.builtin.apt:
+        name:
+          - "{{ 'docker-ce' if docker_version == '' else 'docker-ce=' + docker_version }}"
+          - "{{ 'docker-ce-cli' if docker_cli_version == '' else 'docker-ce-cli=' + docker_cli_version }}"
+          - "{{ 'containerd.io' if docker_containerd_version == '' else 'containerd.io=' + docker_containerd_version }}"
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+      notify: restart docker
+  always:
+    - name: Ensure Docker service is running and enabled
+      ansible.builtin.systemd:
+        name: docker
+        state: started
+        enabled: true
+- name: Docker config
+  tags:
+    - docker_config
+    - docker
+  become: true
+  block:
+    - name: Add user to docker group
+      ansible.builtin.user:
+        name: "{{ ansible_user }}"
+        groups: docker
+        append: true
 
-- name: Add user to docker group
-  user:
-    name: "{{ ansible_user }}"
-    groups: docker
-    append: yes
-
-- name: Install python3-docker for Ansible docker modules
-  apt:
-    name: python3-docker
-    state: present
+    - name: Install python3-docker for Ansible docker modules
+      ansible.builtin.apt:
+        name: python3-docker
+        state: present
